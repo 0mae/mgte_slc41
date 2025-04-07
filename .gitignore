@@ -1,0 +1,11 @@
+qsub_out/
+sbatch_out/
+db/
+data/
+raw/
+.local/
+.config/
+.Rhistory
+bio_4.3.2_latest.sif
+print.qmd
+print.md

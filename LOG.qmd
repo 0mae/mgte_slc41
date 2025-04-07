@@ -1,0 +1,848 @@
+---
+title: "mgte_slc41"
+format: gfm
+engine: markdown
+execute:
+  eval: false
+  echo: true
+  warning: false
+---
+
+# Set environments
+
+## Set variables and functions
+
+```{sh}
+#| label: set_variables_and_functions
+# For PBS
+Email=XXX
+# Project home directory
+Home=$PWD
+# GTDB rawdata directory
+GTDB_DIR="../db/gtdb_release220/data.gtdb.ecogenomic.org/releases/latest/"
+COG_DIR="../db/cog2020"
+KOFAM_DIR="../db/kofam_2024-05-01"
+# anticonet_r220 repository
+anti220="../anticonet_r220"
+# Software path
+TAXONKIT="../tools/taxonkit-0.18.0"
+# print columns
+function pri_col () {
+	head -n1 $1 | sed 's/\t/\n/g' | awk '{print NR,$1}'
+}
+# check table header
+function hd_check () {
+	head $1 | column -t -s "$(printf '\011')"
+}
+```
+
+## R container: bio_4.3.2
+
+- `bio_4.3.2` is the primary R image used for most of the analysis. It was built from this [Dockerfile](Dockerfile).
+
+```{sh}
+#| label: build_container
+User=XXX
+docker image build -t $User/bio_4.3.2 .
+```
+
+- To pull the docker or singularity image via DockerHub
+
+```{sh}
+#| label: pull_container
+# For local
+docker pull $User/bio_4.3.2
+# For fe1
+singularity pull docker://$User/bio_4.3.2
+```
+
+- Run RStudio Server
+  - http://localhost:8787
+
+```{sh}
+#| label: run_rstudio_server
+Pass=XXX
+docker container run -p 8787:8787 -v ${PWD}:/home/rstudio -e PASSWORD=$Pass $User/bio_4.3.2
+```
+
+- Load packages
+
+```{r}
+#| label: load_packages
+library(tidyverse)
+```
+
+## Supercomputer systems
+
+```{sh}
+#| label: fe1
+bash
+module load quarto/1.2.335 hmmer/3.4 seqkit/2.8.2 mmseqs2/15-6f452 blast+/2.15.0 diamond/2.1.9 mafft/7.520 trimal/1.4.1 FastTree/2.1.11
+```
+
+```{sh}
+#| label: HBW2
+project_acc=XXX
+```
+
+## Other software
+
+- [TaxonKit v0.18.0](https://bioinf.shenwei.me/taxonkit/)
+
+```{sh}
+#| label: download_taxonkit
+wget -P $TAXONKIT https://github.com/shenwei356/taxonkit/releases/download/v0.18.0/taxonkit_linux_amd64.tar.gz
+tar -zxvf $TAXONKIT/taxonkit_linux_amd64.tar.gz -C $TAXONKIT
+# version
+$TAXONKIT/taxonkit --help | head -n3
+<< OUTPUT
+TaxonKit - A Practical and Efficient NCBI Taxonomy Toolkit
+
+Version: 0.18.0
+OUTPUT
+# Download and uncompress taxdump.tar.gz
+wget -P $TAXONKIT https://ftp.ncbi.nih.gov/pub/taxonomy/taxdump.tar.gz
+tar -zxvf $TAXONKIT/taxdump.tar.gz -C $TAXONKIT
+```
+
+## Rendering
+
+- `Ctrl + Shift + K` at VSCode
+
+- Or, run following command
+
+```{sh}
+#| label: quarto_render
+quarto render LOG.qmd
+```
+
+# Copy files
+
+## GTDB data set from anticonet_r220
+
+- Copy files from anticonet_r220 repository (https://github.com/0mae/anticonet_r220/tree/main)
+- `proteins_raw_gtdbtax_cog.tsv.gz`
+  - Only proteins with COG IDs
+- `proteins_raw_gtdbtax_cog_synteny.tsv.gz`
+  - Proteins from GTDB representative genomes
+  - COG is assigned.
+- `seqs_split`
+  - 501 chunks of amino acid sequences from HQ GTDB representative genomes
+
+```{sh}
+#| label: copy_anticonet_r220_files
+mkdir -p data/tsv
+cp $anti220/data/tsv/proteins_raw_gtdbtax_cog.tsv.gz data/tsv/
+cp $anti220/data/tsv/proteins_raw_gtdbtax_cog_synteny.tsv.gz data/tsv/
+cp $anti220/data/tsv/lq_proteins_raw_gtdbtax_cog.tsv.gz data/tsv/
+cp $anti220/data/tsv/lq_proteins_raw_gtdbtax_cog_synteny.tsv.gz data/tsv/
+cp -r $anti220/data/seqs_split data/
+cp -r $anti220/data/seqs_split_lq data/
+cp $anti220/data/tsv/genomes_analyzed_ar.tsv.gz data/tsv/
+cp $anti220/data/tsv/genomes_analyzed_bac.tsv.gz data/tsv/
+cp $anti220/data/tsv/genomes_low_quality_ar.tsv.gz data/tsv/
+cp $anti220/data/tsv/genomes_low_quality_bac.tsv.gz data/tsv/
+```
+
+# Download databases
+
+## Pfam_A
+
+- RELEASE 37.0
+
+```{sh}
+#| label: download_pfam_a_hmm
+mkdir -p db/pfam
+
+# resources_used.vmem=736392kb;resources_used.walltime=00:19:16
+qsub -q SMALL -m abe -M $Email -l select=1:ncpus=1:mem=48gb -l walltime=12:00:00 -e qsub_out/download_pfam_a_hmm_e -o qsub_out/download_pfam_a_hmm_o scripts/qsub/download_pfam_a_hmm.sh
+{
+source /etc/profile.d/modules.sh
+cd $PBS_O_WORKDIR
+cd db/pfam
+wget https://ftp.ebi.ac.uk/pub/databases/Pfam/current_release/userman.txt
+wget https://ftp.ebi.ac.uk/pub/databases/Pfam/current_release/relnotes.txt
+wget https://ftp.ebi.ac.uk/pub/databases/Pfam/current_release/Pfam-A.hmm.gz
+}
+
+# Compress PBS output
+gzip qsub_out/download_pfam_a_hmm_{e,o}
+
+# release note
+cat db/pfam/relnotes.txt | head -n3
+<< OUTPUT
+PFAM : Multiple alignments and profile HMMs of protein domains
+                        RELEASE 37.0
+            --------------------------------------
+OUTPUT
+```
+
+# MgtE & SLC41
+
+- Reference MgtE:
+  - Thermus thermophilus TTHA1060 (UniProt: [Q5SMG8](https://www.uniprot.org/uniprotkb/Q5SMG8/entry))
+- MgtE Pfam domain:
+  - [PF01769](https://www.ebi.ac.uk/interpro/entry/pfam/PF01769/) (Divalent cation transporter, MgtE)
+
+## Collect proteins from InterPro API
+
+- API manual: [Interpro 7 API](https://github.com/ProteinsWebTeam/interpro7-api/tree/master)
+- Make tsv and fasta files
+
+```{sh}
+#| label: PF01769_interpro_api;  entries
+# 
+qsub -q SMALL -m abe -M $Email -l select=1:ncpus=1:mem=5gb -l walltime=12:00:00 -e qsub_out/PF01769_interpro_api_e -o qsub_out/PF01769_interpro_api_o scripts/qsub/PF01769_interpro_api.sh
+{
+cd $PBS_O_WORKDIR
+mkdir -p db/interpro_api
+singularity exec --bind $(pwd):/temp bio_4.3.2_latest.sif bash -c "cd /temp && Rscript --vanilla --slave scripts/r/interpro_api.R PF01769 pfam db/interpro_api/PF01769.tsv"
+}
+# Compress PBS output
+gzip qsub_out/PF01769_interpro_api_{e,o}
+# Compress tsv
+cat db/interpro_api/PF01769.tsv | gzip > db/interpro_api/PF01769.tsv.gz
+# Number of entries
+zcat db/interpro_api/PF01769.tsv.gz | tail -n +2 | wc -l
+<< OUTPUT
+
+OUTPUT
+# Make fasta file from tsv
+zcat db/interpro_api/PF01769.tsv.gz | tail -n +2 | cut -f 1,10 | sed 's/^/>/g' | sed 's/\t/\n/g' | \
+  gzip > db/interpro_api/PF01769.faa.gz
+```
+
+
+
+
+
+
+
+# MISC: P2X acceptor (Omitted)
+
+## Protein families
+
+- Human P2X acceptor
+  - P2X1: [P51575.1](https://www.uniprot.org/uniprotkb/P51575/entry)
+  - P2X2: [Q9UBL9.1](https://www.uniprot.org/uniprotkb/Q9UBL9/entry)
+  - P2X3: [P56373.2](https://www.uniprot.org/uniprotkb/P56373/entry)
+  - P2X4: [Q99571.2](https://www.uniprot.org/uniprotkb/Q99571/entry)
+  - P2X5: [Q93086.4](https://www.uniprot.org/uniprotkb/Q93086/entry)
+  - P2X6: [O15547.2](https://www.uniprot.org/uniprotkb/O15547/entry)
+  - P2X7: [Q99572.4](https://www.uniprot.org/uniprotkb/Q99572/entry)
+- Pfam
+  - [PF00864](https://www.ebi.ac.uk/interpro/entry/pfam/PF00864/): ATP P2X receptor
+- InterPro
+  - [IPR027309](https://www.ebi.ac.uk/interpro/entry/InterPro/IPR027309/): P2X purinoreceptor extracellular domain superfamily
+
+## Collect proteins from InterPro API
+
+- API manual: [Interpro 7 API](https://github.com/ProteinsWebTeam/interpro7-api/tree/master)
+- Make tsv and fasta files
+
+```{sh}
+#| label: PF00864_interpro_api; 8910 entries
+# resources_used.vmem=2506272kb;resources_used.walltime=00:09:49
+qsub -q SMALL -m abe -M $Email -l select=1:ncpus=1:mem=5gb -e qsub_out/PF00864_interpro_api_e -o qsub_out/PF00864_interpro_api_o scripts/qsub/PF00864_interpro_api.sh
+{
+cd $PBS_O_WORKDIR
+mkdir -p db/interpro_api
+singularity exec --bind $(pwd):/temp bio_4.3.2_latest.sif bash -c "cd /temp && Rscript --vanilla --slave scripts/r/interpro_api.R PF00864 pfam db/interpro_api/PF00864.tsv"
+}
+# Compress PBS output
+gzip qsub_out/PF00864_interpro_api_{e,o}
+# Compress tsv
+cat db/interpro_api/PF00864.tsv | gzip > db/interpro_api/PF00864.tsv.gz
+# Number of entries
+zcat db/interpro_api/PF00864.tsv.gz | tail -n +2 | wc -l
+<< OUTPUT
+8910
+OUTPUT
+# Make fasta file from tsv
+zcat db/interpro_api/PF00864.tsv.gz | tail -n +2 | cut -f 1,10 | sed 's/^/>/g' | sed 's/\t/\n/g' | \
+  gzip > db/interpro_api/PF00864.faa.gz
+```
+
+```{sh}
+#| label: IPR027309_interpro_api; 8485 entries
+# resources_used.vmem=2636796kb;resources_used.walltime=00:08:49
+qsub -q SMALL -m abe -M $Email -l select=1:ncpus=1:mem=5gb -e qsub_out/IPR027309_interpro_api_e -o qsub_out/IPR027309_interpro_api_o scripts/qsub/IPR027309_interpro_api.sh
+{
+cd $PBS_O_WORKDIR
+mkdir -p db/interpro_api
+singularity exec --bind $(pwd):/temp bio_4.3.2_latest.sif bash -c "cd /temp && Rscript --vanilla --slave scripts/r/interpro_api.R IPR027309 interpro db/interpro_api/IPR027309.tsv"
+}
+# Compress PBS output
+gzip qsub_out/IPR027309_interpro_api_{e,o}
+# Compress tsv
+cat db/interpro_api/IPR027309.tsv | gzip > db/interpro_api/IPR027309.tsv.gz
+# Number of entries
+zcat db/interpro_api/IPR027309.tsv.gz | tail -n +2 | wc -l
+<< OUTPUT
+8485
+OUTPUT
+# Make fasta file from tsv
+zcat db/interpro_api/IPR027309.tsv.gz | tail -n +2 | cut -f 1,10 | sed 's/^/>/g' | sed 's/\t/\n/g' | \
+  gzip > db/interpro_api/IPR027309.faa.gz
+```
+
+## Protein annotation (InterPro API)
+
+- Retrieve InterPro and Pfam IDs from InterPro API
+
+```{sh}
+#| label: PF00864_interpro_api_annotation
+# 
+qsub -q SMALL -m abe -M $Email -l select=1:ncpus=1:mem=48gb -l walltime=12:00:00 -e qsub_out/PF00864_interpro_api_annotation_e -o qsub_out/PF00864_interpro_api_annotation_o scripts/qsub/PF00864_interpro_api_annotation.sh
+{
+cd $PBS_O_WORKDIR
+mkdir -p db/interpro_api
+singularity exec --bind $(pwd):/temp bio_4.3.2_latest.sif bash -c "cd /temp && Rscript --vanilla --slave scripts/r/interpro_api_protein_annotation.R db/interpro_api/PF00864.tsv.gz db/interpro_api/PF00864_annotation.tsv"
+}
+# Compress PBS output
+gzip qsub_out/PF00864_interpro_api_annotation_{e,o}
+# Compress tsv
+cat db/interpro_api/PF00864_annotation.tsv | gzip > db/interpro_api/PF00864_annotation.tsv.gz
+# Number of entries
+zcat db/interpro_api/PF00864_annotation.tsv.gz | tail -n +2 | cut -f 1 | wort | uniq | wc -l
+<< OUTPUT
+
+OUTPUT
+```
+
+- For IPR027309-unique proteins
+
+```{sh}
+#| label: IPR027309-uniq_interpro_api_annotation
+
+# Retrieve IPR027309-uniq IDs
+join -t "$(printf '\011')" -1 1 -2 1 <(zcat db/interpro_api/IPR027309.tsv.gz | tail -n +2 | sort -k 1,1) <(zcat db/interpro_api/PF00864.tsv.gz db/interpro_api/IPR027309.tsv.gz | sort | uniq -u | cut -f 1) | \
+  cat <(zcat db/interpro_api/IPR027309.tsv.gz | head -n 1) - | gzip > db/interpro_api/IPR027309-uniq.tsv.gz
+# Number of entries
+zcat db/interpro_api/IPR027309-uniq.tsv.gz | tail -n +2 | wc -l
+<< OUTPUT
+18
+OUTPUT
+
+# resources_used.vmem=2409488kb;resources_used.walltime=00:00:39
+qsub -q SMALL -m abe -M $Email -l select=1:ncpus=1:mem=5gb -l walltime=12:00:00 -e qsub_out/IPR027309-uniq_interpro_api_annotation_e -o qsub_out/IPR027309-uniq_interpro_api_annotation_o scripts/qsub/IPR027309-uniq_interpro_api_annotation.sh
+{
+cd $PBS_O_WORKDIR
+mkdir -p db/interpro_api
+singularity exec --bind $(pwd):/temp bio_4.3.2_latest.sif bash -c "cd /temp && Rscript --vanilla --slave scripts/r/interpro_api_protein_annotation.R db/interpro_api/IPR027309-uniq.tsv.gz db/interpro_api/IPR027309-uniq_annotation.tsv"
+}
+# Compress PBS output
+gzip qsub_out/IPR027309-uniq_interpro_api_annotation_{e,o}
+# Compress tsv
+cat db/interpro_api/IPR027309-uniq_annotation.tsv | gzip > db/interpro_api/IPR027309-uniq_annotation.tsv.gz
+# Number of entries
+zcat db/interpro_api/IPR027309-uniq_annotation.tsv.gz | tail -n +2 | cut -f 1 | sort | uniq | wc -l
+<< OUTPUT
+18
+OUTPUT
+```
+
+## hmmscan (Ommited)
+
+- https://www.ebi.ac.uk/Tools/hmmer/search/hmmscan
+- Protein sequence vs profile-HMM database (Pfam-A)
+
+```{sh}
+#| label: hmmpress_pfamA
+zcat db/pfam/Pfam-A.hmm.gz > db/pfam/Pfam-A.hmm
+hmmpress db/pfam/Pfam-A.hmm
+```
+
+```{sh}
+#| label: PF00864_interpro_hmmscan; 15624 nr hits
+# resources_used.vmem=1417964kb;resources_used.walltime=00:47:46
+qsub -q SMALL -m abe -M $Email -l select=1:ncpus=12:mem=48gb -l walltime=12:00:00 -e qsub_out/PF00864_interpro_hmmscan_e -o qsub_out/PF00864_interpro_hmmscan_o scripts/qsub/PF00864_interpro_hmmscan.sh
+{
+source /etc/profile.d/modules.sh
+module load hmmer/3.4
+cd $PBS_O_WORKDIR
+zcat db/interpro_api/PF00864.faa.gz > db/interpro_api/PF00864.faa
+hmmscan --domtblout data/tsv/PF00864_interpro_hmmscan.txt --cpu 12 db/pfam/Pfam-A.hmm db/interpro_api/PF00864.faa
+}
+# Compress PBS output
+gzip qsub_out/PF00864_interpro_hmmscan_{e,o}
+
+# Make tsv format
+cat data/tsv/PF00864_interpro_hmmscan.txt | bash scripts/bash/hmmsearch_tbl2tsv.sh > data/tsv/PF00864_interpro_hmmscan.tsv
+# Number of hits
+tail -n +2 data/tsv/PF00864_interpro_hmmscan.tsv | wc -l
+<< OUTPUT
+22830
+OUTPUT
+# Number of hits (remove redundancy)
+cat data/tsv/PF00864_interpro_hmmscan.tsv | cut -f 1,2,4 | tail -n +2 | sort | uniq -c | \
+  awk -v OFS="\t" '{print $4,$2,$3,$1}' | sed '1s/^/query\ttarget\ttacc\tn_hits\n/' | \
+  gzip > data/tsv/PF00864_interpro_hmmscan_nr.tsv.gz
+zcat data/tsv/PF00864_interpro_hmmscan_nr.tsv.gz | tail -n +2 | wc -l
+<< OUTPUT
+15624
+OUTPUT
+```
+
+```{sh}
+#| label: IPR027309_interpro_hmmscan; 14976 nr hits
+# resources_used.vmem=1383160kb;resources_used.walltime=00:39:05
+qsub -q SMALL -m abe -M $Email -l select=1:ncpus=12:mem=48gb -l walltime=12:00:00 -e qsub_out/IPR027309_interpro_hmmscan_e -o qsub_out/IPR027309_interpro_hmmscan_o scripts/qsub/IPR027309_interpro_hmmscan.sh
+{
+source /etc/profile.d/modules.sh
+module load hmmer/3.4
+cd $PBS_O_WORKDIR
+zcat db/interpro_api/IPR027309.faa.gz > db/interpro_api/IPR027309.faa
+hmmscan --domtblout data/tsv/IPR027309_interpro_hmmscan.txt --cpu 12 db/pfam/Pfam-A.hmm db/interpro_api/IPR027309.faa
+}
+# Compress PBS output
+gzip qsub_out/IPR027309_interpro_hmmscan_{e,o}
+
+# Make tsv format
+cat data/tsv/IPR027309_interpro_hmmscan.txt | bash scripts/bash/hmmsearch_tbl2tsv.sh > data/tsv/IPR027309_interpro_hmmscan.tsv
+# Number of hits
+tail -n +2 data/tsv/IPR027309_interpro_hmmscan.tsv | wc -l
+<< OUTPUT
+21858
+OUTPUT
+# Number of hits (remove redundancy)
+cat data/tsv/IPR027309_interpro_hmmscan.tsv | cut -f 1,2,4 | tail -n +2 | sort | uniq -c | \
+  awk -v OFS="\t" '{print $4,$2,$3,$1}' | sed '1s/^/query\ttarget\ttacc\tn_hits\n/' | \
+  gzip > data/tsv/IPR027309_interpro_hmmscan_nr.tsv.gz
+zcat data/tsv/IPR027309_interpro_hmmscan_nr.tsv.gz | tail -n +2 | wc -l
+<< OUTPUT
+14976
+OUTPUT
+```
+
+## TaxonKit
+
+- https://bioinf.shenwei.me/taxonkit/
+- Format TaxID
+
+```{sh}
+#| label: PF00864_taxonkit; 8910 entries
+# resources_used.vmem=0kb;resources_used.walltime=00:00:02
+qsub -q SMALL -m abe -M $Email -v TAXONKIT=$TAXONKIT -l select=1:ncpus=12:mem=48gb -l walltime=12:00:00 -e qsub_out/PF00864_taxonkit_e -o qsub_out/PF00864_taxonkit_o scripts/qsub/PF00864_taxonkit.sh
+{
+#!/bin/bash
+cd $PBS_O_WORKDIR
+zcat db/interpro_api/PF00864.tsv.gz | tail -n +2 | \
+  $TAXONKIT/taxonkit reformat -I 7 -f "{k}\t{p}\t{c}\t{o}\t{f}\t{g}\t{s}" --data-dir $TAXONKIT --threads 12 | \
+  cat <(zcat db/interpro_api/PF00864.tsv.gz | head -n1 | \
+    perl -ne 's/\n/\tsuperkingdom\tphylum\tclass\torder\tfamily\tgenus\tspecies\n/; print') - | \
+  gzip > db/interpro_api/PF00864_taxonkit.tsv.gz
+}
+# Compress PBS output
+gzip qsub_out/PF00864_taxonkit_{e,o}
+# Number of entries
+zcat db/interpro_api/PF00864_taxonkit.tsv.gz | tail -n +2 | wc -l
+<< OUTPUT
+8910
+OUTPUT
+```
+
+```{sh}
+#| label: IPR027309_taxonkit; 8485 entries
+# resources_used.vmem=0kb;resources_used.walltime=00:00:03
+qsub -q SMALL -m abe -M $Email -v TAXONKIT=$TAXONKIT -l select=1:ncpus=12:mem=48gb -l walltime=12:00:00 -e qsub_out/IPR027309_taxonkit_e -o qsub_out/IPR027309_taxonkit_o scripts/qsub/IPR027309_taxonkit.sh
+{
+#!/bin/bash
+cd $PBS_O_WORKDIR
+zcat db/interpro_api/IPR027309.tsv.gz | tail -n +2 | \
+  $TAXONKIT/taxonkit reformat -I 7 -f "{k}\t{p}\t{c}\t{o}\t{f}\t{g}\t{s}" --data-dir $TAXONKIT --threads 12 | \
+  cat <(zcat db/interpro_api/IPR027309.tsv.gz | head -n1 | \
+    perl -ne 's/\n/\tsuperkingdom\tphylum\tclass\torder\tfamily\tgenus\tspecies\n/; print') - | \
+  gzip > db/interpro_api/IPR027309_taxonkit.tsv.gz
+}
+# Compress PBS output
+gzip qsub_out/IPR027309_taxonkit_{e,o}
+# Number of entries
+zcat db/interpro_api/IPR027309_taxonkit.tsv.gz | tail -n +2 | wc -l
+<< OUTPUT
+8485
+OUTPUT
+```
+
+## Stats
+
+### Overlap between PF00864 & IPR027309
+
+```{r}
+#| label: PF00864_IPR027309_overlap
+library(tidyverse)
+library(ggupset)
+source("scripts/r/theme_set_1.R")
+
+# Load interpro_api results (with taxonkit)
+df_PF00864 <- read.csv("db/interpro_api/PF00864_taxonkit.tsv.gz", header = TRUE, sep = "\t", quote = "\"", na.strings=c("", "NULL")) %>% as_tibble()
+df_IPR027309 <- read.csv("db/interpro_api/IPR027309_taxonkit.tsv.gz", header = TRUE, sep = "\t", quote = "\"", na.strings=c("", "NULL")) %>% as_tibble()
+
+# Plot
+PF00864_IPR027309_overlap_1 <- 
+  rbind(
+    df_PF00864 %>% select(accession) %>% mutate(EntryID = "PF00864"),
+    df_IPR027309 %>% select(accession) %>% mutate(EntryID = "IPR027309")
+  ) %>% 
+  group_by(accession) %>% summarize(EntryIDs = list(EntryID)) %>% 
+  ggplot(aes(x = EntryIDs)) +
+  geom_bar() +
+  scale_x_upset()
+ggsave("images/PF00864_IPR027309_overlap_1.png", PF00864_IPR027309_overlap_1, height = 3, width = 3, dpi = 300)
+```
+
+<img src="images/PF00864_IPR027309_overlap_1.png" width="30%">
+
+### Length distribution
+
+```{r}
+#| label: PF00864_stats
+library(tidyverse)
+library(patchwork)
+source("scripts/r/theme_set_1.R")
+
+# Load interpro_api results (with taxonkit)
+df_interpro <- read.csv("db/interpro_api/PF00864_taxonkit.tsv.gz", header = TRUE, sep = "\t", quote = "\"", na.strings=c("", "NULL")) %>% as_tibble()
+# Load hmmscan results
+df_hmmscan <- read.csv("data/tsv/PF00864_interpro_hmmscan_nr.tsv.gz", header = TRUE, sep = "\t", quote = "\"", na.strings=c("", "NULL")) %>% as_tibble()
+
+#### Length summary ####
+df_interpro %>% select(length) %>% pull() %>% summary()
+  # Min. 1st Qu.  Median    Mean 3rd Qu.    Max.
+  #  27.0   335.0   393.0   383.3   422.0  4998.0
+
+#### Length distribution ####
+set.seed(1234)
+PF00864_stats_1 <- df_interpro %>% 
+  ggplot(aes(y = length, x = "PF00864")) +
+  geom_point(position = position_jitter(), size = 0.1, alpha = 0.5, color = "grey70") +
+  geom_violin() +
+  ylim(0,1000)
+ggsave("images/PF00864_stats_1.png", PF00864_stats_1, height = 5, width = 3, dpi = 300)
+
+#### Histgram ####
+PF00864_stats_2 <- df_interpro %>% 
+  # Set length bin
+  mutate(len_bin = cut(length, c(seq(1,1000,10), Inf), right = FALSE)) %>% 
+  group_by(len_bin) %>% summarize(n_protein = dplyr::n()) %>% 
+  ggplot(aes(x = n_protein, y = len_bin)) +
+  geom_bar(stat = "identity")
+ggsave("images/PF00864_stats_2.png", PF00864_stats_2, height = 12, width = 3, dpi = 300)
+
+#### Pfam ####
+# Merge tsv
+df_merge <-
+  left_join(df_interpro, df_hmmscan %>% dplyr::rename(accession = "query"), by = "accession") %>% 
+  mutate(
+    # Set length bin
+    len_bin = cut(length, c(seq(1,1000,10), Inf), right = FALSE),
+    # Change name: description;pfam
+    pfam_hit = paste(target, tacc, sep = ";")
+  )
+# Color pallete
+df_pfam12 <- df_merge %>% 
+  group_by(pfam_hit) %>% summarize(n_proteins = dplyr::n()) %>% arrange(desc(n_proteins)) %>% 
+  head(12)
+# Plot
+df_merge$pfam_hit <- factor(df_merge$pfam_hit, levels = df_pfam12$pfam_hit)
+PF00864_stats_3 <- df_merge %>% 
+  group_by(len_bin, pfam_hit) %>% summarize(n_pfam_hit = dplyr::n()) %>% ungroup() %>% 
+  ggplot(aes(x = n_pfam_hit, y = len_bin, fill = pfam_hit)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = cbp12, na.value = "black")
+ggsave("images/PF00864_stats_3.png", PF00864_stats_3, height = 12, width = 8, dpi = 300)
+
+#### Merge plot 2 & 3 ####
+PF00864_stats_2_3 <- 
+  (PF00864_stats_2 | PF00864_stats_3) + plot_layout(ncol = 2, widths = c(1,1))
+ggsave("images/PF00864_stats_2_3.png", PF00864_stats_2_3, height = 12, width = 10, dpi = 300)
+```
+
+<img src="images/PF00864_stats_1.png" width="20%">
+<img src="images/PF00864_stats_2_3.png" width="50%">
+
+```{r}
+#| label: IPR027309_stats
+library(tidyverse)
+library(patchwork)
+source("scripts/r/theme_set_1.R")
+
+# Load interpro_api results (with taxonkit)
+df_interpro <- read.csv("db/interpro_api/IPR027309_taxonkit.tsv.gz", header = TRUE, sep = "\t", quote = "\"", na.strings=c("", "NULL")) %>% as_tibble()
+# Load hmmscan results
+df_hmmscan <- read.csv("data/tsv/IPR027309_interpro_hmmscan_nr.tsv.gz", header = TRUE, sep = "\t", quote = "\"", na.strings=c("", "NULL")) %>% as_tibble()
+
+#### Length summary ####
+df_interpro %>% select(length) %>% pull() %>% summary()
+   # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+   # 27.0   343.0   394.0   387.5   424.0  4998.0 
+
+#### Length distribution ####
+set.seed(1234)
+IPR027309_stats_1 <- df_interpro %>% 
+  ggplot(aes(y = length, x = "IPR027309")) +
+  geom_point(position = position_jitter(), size = 0.1, alpha = 0.5, color = "grey70") +
+  geom_violin() +
+  ylim(0,1000)
+ggsave("images/IPR027309_stats_1.png", IPR027309_stats_1, height = 5, width = 3, dpi = 300)
+
+#### Histgram ####
+IPR027309_stats_2 <- df_interpro %>% 
+  # Set length bin
+  mutate(len_bin = cut(length, c(seq(1,1000,10), Inf), right = FALSE)) %>% 
+  group_by(len_bin) %>% summarize(n_protein = dplyr::n()) %>% 
+  ggplot(aes(x = n_protein, y = len_bin)) +
+  geom_bar(stat = "identity")
+ggsave("images/IPR027309_stats_2.png", IPR027309_stats_2, height = 12, width = 3, dpi = 300)
+
+#### Pfam ####
+# Merge tsv
+df_merge <-
+  left_join(df_interpro, df_hmmscan %>% dplyr::rename(accession = "query"), by = "accession") %>% 
+  mutate(
+    # Set length bin
+    len_bin = cut(length, c(seq(1,1000,10), Inf), right = FALSE),
+    # Change name: description;pfam
+    pfam_hit = paste(target, tacc, sep = ";")
+  )
+# Color pallete
+df_pfam12 <- df_merge %>% 
+  group_by(pfam_hit) %>% summarize(n_proteins = dplyr::n()) %>% arrange(desc(n_proteins)) %>% 
+  head(12)
+# Plot
+df_merge$pfam_hit <- factor(df_merge$pfam_hit, levels = df_pfam12$pfam_hit)
+IPR027309_stats_3 <- df_merge %>% 
+  group_by(len_bin, pfam_hit) %>% summarize(n_pfam_hit = dplyr::n()) %>% ungroup() %>% 
+  ggplot(aes(x = n_pfam_hit, y = len_bin, fill = pfam_hit)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = cbp12, na.value = "black")
+ggsave("images/IPR027309_stats_3.png", IPR027309_stats_3, height = 12, width = 8, dpi = 300)
+
+#### Merge plot 2 & 3 ####
+IPR027309_stats_2_3 <- 
+  (IPR027309_stats_2 | IPR027309_stats_3) + plot_layout(ncol = 2, widths = c(1,1))
+ggsave("images/IPR027309_stats_2_3.png", IPR027309_stats_2_3, height = 12, width = 10, dpi = 300)
+```
+
+<img src="images/IPR027309_stats_1.png" width="20%">
+<img src="images/IPR027309_stats_2_3.png" width="50%">
+
+## Classification (PF00864)
+
+- Length bin (aa)
+  - 20-260
+  - 261-670
+  - 671-5000
+- Make metadata tsv for taxonium
+
+```{r}
+#| label: PF00864_classification
+library(tidyverse)
+
+# Load interpro_api results (with taxonkit)
+df_interpro <- read.csv("db/interpro_api/PF00864_taxonkit.tsv.gz", header = TRUE, sep = "\t", quote = "\"", na.strings=c("", "NULL")) %>% as_tibble()
+# Load hmmscan results
+df_hmmscan <- read.csv("data/tsv/PF00864_interpro_hmmscan_nr.tsv.gz", header = TRUE, sep = "\t", quote = "\"", na.strings=c("", "NULL")) %>% as_tibble()
+
+#### Merge tsv ####
+df_classified <-
+  df_interpro %>% 
+  # Set length bin
+  mutate(
+    len_bin = cut(length, c(1,260,670,Inf), right = FALSE),
+    len_bin2 = cut(length, c(1,200,210,240,260,360,440,510,590,600,670,1000,Inf), right = FALSE)
+  ) %>% 
+  # Merge pfam
+  left_join(
+    df_hmmscan %>% dplyr::rename(accession = "query") %>% 
+      group_by(accession) %>% summarize(pfam_hits = paste(tacc, collapse = ";")), 
+    by = "accession"
+  )
+
+#### len_bin distribution ####
+df_classified$len_bin %>% table()
+  # [1,260) [260,670) [670,Inf) 
+  #    1627      7165       118
+
+#### Export taxonium metadata tsv ####
+write.table(df_classified, "data/tree/PF00864_metadata.tsv", append=FALSE, quote=FALSE, sep = "\t", row.names=FALSE)
+system("cat data/tree/PF00864_metadata.tsv | gzip > data/tree/PF00864_metadata.tsv.gz && rm data/tree/PF00864_metadata.tsv")
+```
+
+```{sh}
+#| label: PF00864_classification_fasta
+zcat data/tree/PF00864_metadata.tsv.gz | awk -F "\t" -v OFS="\t" '$19 == "[1,260)" {print $1,$10}' | \
+  sed 's/^/>/g' | sed 's/\t/\n/g' | \
+  gzip > db/interpro_api/PF00864-1_260.faa.gz
+zcat data/tree/PF00864_metadata.tsv.gz | awk -F "\t" -v OFS="\t" '$19 == "[260,670)" {print $1,$10}' | \
+  sed 's/^/>/g' | sed 's/\t/\n/g' | \
+  gzip > db/interpro_api/PF00864-260_670.faa.gz
+zcat data/tree/PF00864_metadata.tsv.gz | awk -F "\t" -v OFS="\t" '$19 == "[670,Inf)" {print $1,$10}' | \
+  sed 's/^/>/g' | sed 's/\t/\n/g' | \
+  gzip > db/interpro_api/PF00864-670_Inf.faa.gz
+```
+
+## Make tree and metadata (PF00864)
+
+- MSA: MAFFT
+- Trimming: trimal
+- Tree: FastTree
+
+### PF00864-1_260
+
+```{sh}
+#| label: PF00864-1_260_mafft
+# resources_used.vmem=0kb;resources_used.walltime=00:00:02
+qsub -q SMALL -m abe -M $Email -l select=1:ncpus=12:mem=48gb -l walltime=12:00:00 -e qsub_out/PF00864-1_260_mafft_e -o qsub_out/PF00864-1_260_mafft_o scripts/qsub/PF00864-1_260_mafft.sh
+{
+source /etc/profile.d/modules.sh
+module load mafft/7.520
+cd $PBS_O_WORKDIR
+zcat db/interpro_api/PF00864-1_260.faa.gz > db/interpro_api/PF00864-1_260.faa
+mafft --thread 12 db/interpro_api/PF00864-1_260.faa > data/seqs/PF00864-1_260_mafft.faa
+}
+# Compress PBS output
+gzip qsub_out/PF00864-1_260_mafft_{e,o}
+```
+
+```{sh}
+#| label: PF00864-1_260_mafft_trimal; 1129/1627 sequences
+# resources_used.vmem=0kb;resources_used.walltime=00:00:10
+qsub -q SMALL -m abe -M $Email -l select=1:ncpus=12:mem=48gb -e qsub_out/PF00864-1_260_mafft_trimal_e -o qsub_out/PF00864-1_260_mafft_trimal_o scripts/qsub/PF00864-1_260_mafft_trimal.sh
+{
+source /etc/profile.d/modules.sh
+module load trimal/1.4.1
+cd $PBS_O_WORKDIR
+trimal -in data/seqs/PF00864-1_260_mafft.faa -out data/seqs/PF00864-1_260_mafft_trimal.faa -automated1
+}
+# Compress PBS output
+gzip qsub_out/PF00864-1_260_mafft_trimal_{e,o}
+# Number of sequences
+cat data/seqs/PF00864-1_260_mafft_trimal.faa | grep '^>' | wc -l
+<< OUTPUT
+1129
+OUTPUT
+```
+
+```{sh}
+#| label: PF00864-1_260_mafft_trimal_FastTree
+# resources_used.vmem=0kb;resources_used.walltime=00:00:01
+qsub -q SMALL -m abe -M $Email -l select=1:ncpus=12:mem=48gb -e qsub_out/PF00864-1_260_mafft_trimal_FastTree_e -o qsub_out/PF00864-1_260_mafft_trimal_FastTree_o scripts/qsub/PF00864-1_260_mafft_trimal_FastTree.sh
+{
+source /etc/profile.d/modules.sh
+module load FastTree/2.1.11
+cd $PBS_O_WORKDIR
+mkdir -p data/tree
+# Multi-threaded
+export OMP_NUM_THREADS=12
+FastTreeMP data/seqs/PF00864-1_260_mafft_trimal.faa > data/tree/PF00864-1_260_mafft_trimal_FastTree.nwk
+}
+# Compress PBS output
+gzip qsub_out/PF00864-1_260_mafft_trimal_FastTree_{e,o}
+```
+
+### PF00864-260_670
+
+```{sh}
+#| label: PF00864-260_670_mafft
+# resources_used.vmem=8484576kb;resources_used.walltime=00:00:42
+qsub -q SMALL -m abe -M $Email -l select=1:ncpus=12:mem=48gb -l walltime=12:00:00 -e qsub_out/PF00864-260_670_mafft_e -o qsub_out/PF00864-260_670_mafft_o scripts/qsub/PF00864-260_670_mafft.sh
+{
+source /etc/profile.d/modules.sh
+module load mafft/7.520
+cd $PBS_O_WORKDIR
+zcat db/interpro_api/PF00864-260_670.faa.gz > db/interpro_api/PF00864-260_670.faa
+mafft --thread 12 db/interpro_api/PF00864-260_670.faa > data/seqs/PF00864-260_670_mafft.faa
+}
+# Compress PBS output
+gzip qsub_out/PF00864-260_670_mafft_{e,o}
+```
+
+```{sh}
+#| label: PF00864-260_670_mafft_trimal; 7151/7165 sequences
+# resources_used.vmem=957732kb;resources_used.walltime=00:16:24
+qsub -q SMALL -m abe -M $Email -l select=1:ncpus=12:mem=48gb -e qsub_out/PF00864-260_670_mafft_trimal_e -o qsub_out/PF00864-260_670_mafft_trimal_o scripts/qsub/PF00864-260_670_mafft_trimal.sh
+{
+source /etc/profile.d/modules.sh
+module load trimal/1.4.1
+cd $PBS_O_WORKDIR
+trimal -in data/seqs/PF00864-260_670_mafft.faa -out data/seqs/PF00864-260_670_mafft_trimal.faa -automated1
+}
+# Compress PBS output
+gzip qsub_out/PF00864-260_670_mafft_trimal_{e,o}
+# Number of sequences
+cat data/seqs/PF00864-260_670_mafft_trimal.faa | grep '^>' | wc -l
+<< OUTPUT
+7151
+OUTPUT
+```
+
+```{sh}
+#| label: PF00864-260_670_mafft_trimal_FastTree
+# resources_used.vmem=0kb;resources_used.walltime=00:00:03
+qsub -q SMALL -m abe -M $Email -l select=1:ncpus=12:mem=48gb -e qsub_out/PF00864-260_670_mafft_trimal_FastTree_e -o qsub_out/PF00864-260_670_mafft_trimal_FastTree_o scripts/qsub/PF00864-260_670_mafft_trimal_FastTree.sh
+{
+source /etc/profile.d/modules.sh
+module load FastTree/2.1.11
+cd $PBS_O_WORKDIR
+mkdir -p data/tree
+# Multi-threaded
+export OMP_NUM_THREADS=12
+FastTreeMP data/seqs/PF00864-260_670_mafft_trimal.faa > data/tree/PF00864-260_670_mafft_trimal_FastTree.nwk
+}
+# Compress PBS output
+gzip qsub_out/PF00864-260_670_mafft_trimal_FastTree_{e,o}
+```
+
+### PF00864-670_Inf
+
+```{sh}
+#| label: PF00864-670_Inf_mafft
+# resources_used.vmem=0kb;resources_used.walltime=00:00:07
+qsub -q SMALL -m abe -M $Email -l select=1:ncpus=12:mem=48gb -l walltime=12:00:00 -e qsub_out/PF00864-670_Inf_mafft_e -o qsub_out/PF00864-670_Inf_mafft_o scripts/qsub/PF00864-670_Inf_mafft.sh
+{
+source /etc/profile.d/modules.sh
+module load mafft/7.520
+cd $PBS_O_WORKDIR
+zcat db/interpro_api/PF00864-670_Inf.faa.gz > db/interpro_api/PF00864-670_Inf.faa
+mafft --thread 12 db/interpro_api/PF00864-670_Inf.faa > data/seqs/PF00864-670_Inf_mafft.faa
+}
+# Compress PBS output
+gzip qsub_out/PF00864-670_Inf_mafft_{e,o}
+```
+
+```{sh}
+#| label: PF00864-670_Inf_mafft_trimal; 118/118 sequences
+# resources_used.vmem=0kb;resources_used.walltime=00:00:00
+qsub -q SMALL -m abe -M $Email -l select=1:ncpus=12:mem=48gb -e qsub_out/PF00864-670_Inf_mafft_trimal_e -o qsub_out/PF00864-670_Inf_mafft_trimal_o scripts/qsub/PF00864-670_Inf_mafft_trimal.sh
+{
+source /etc/profile.d/modules.sh
+module load trimal/1.4.1
+cd $PBS_O_WORKDIR
+trimal -in data/seqs/PF00864-670_Inf_mafft.faa -out data/seqs/PF00864-670_Inf_mafft_trimal.faa -automated1
+}
+# Compress PBS output
+gzip qsub_out/PF00864-670_Inf_mafft_trimal_{e,o}
+# Number of sequences
+cat data/seqs/PF00864-670_Inf_mafft_trimal.faa | grep '^>' | wc -l
+<< OUTPUT
+118
+OUTPUT
+```
+
+```{sh}
+#| label: PF00864-670_Inf_mafft_trimal_FastTree
+# resources_used.vmem=0kb;resources_used.walltime=00:00:02
+qsub -q SMALL -m abe -M $Email -l select=1:ncpus=12:mem=48gb -e qsub_out/PF00864-670_Inf_mafft_trimal_FastTree_e -o qsub_out/PF00864-670_Inf_mafft_trimal_FastTree_o scripts/qsub/PF00864-670_Inf_mafft_trimal_FastTree.sh
+{
+source /etc/profile.d/modules.sh
+module load FastTree/2.1.11
+cd $PBS_O_WORKDIR
+mkdir -p data/tree
+# Multi-threaded
+export OMP_NUM_THREADS=12
+FastTreeMP data/seqs/PF00864-670_Inf_mafft_trimal.faa > data/tree/PF00864-670_Inf_mafft_trimal_FastTree.nwk
+}
+# Compress PBS output
+gzip qsub_out/PF00864-670_Inf_mafft_trimal_FastTree_{e,o}
+```
