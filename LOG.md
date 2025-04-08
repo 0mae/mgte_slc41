@@ -189,8 +189,8 @@ OUTPUT
 - Make tsv and fasta files
 
 ``` {sh}
-#| label: PF01769_interpro_api;  entries
-# 
+#| label: PF01769_interpro_api; 42,801 entries
+# resources_used.ncpus=1; resources_used.vmem=2572772kb; resources_used.walltime=00:44:49
 qsub -q SMALL -m abe -M $Email -l select=1:ncpus=1:mem=5gb -l walltime=12:00:00 -e qsub_out/PF01769_interpro_api_e -o qsub_out/PF01769_interpro_api_o scripts/qsub/PF01769_interpro_api.sh
 {
 cd $PBS_O_WORKDIR
@@ -204,7 +204,7 @@ cat db/interpro_api/PF01769.tsv | gzip > db/interpro_api/PF01769.tsv.gz
 # Number of entries
 zcat db/interpro_api/PF01769.tsv.gz | tail -n +2 | wc -l
 << OUTPUT
-
+42801
 OUTPUT
 # Make fasta file from tsv
 zcat db/interpro_api/PF01769.tsv.gz | tail -n +2 | cut -f 1,10 | sed 's/^/>/g' | sed 's/\t/\n/g' | \
