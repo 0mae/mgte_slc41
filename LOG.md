@@ -190,6 +190,7 @@ OUTPUT
 
 ``` {sh}
 #| label: PF01769_interpro_api; 42,801 entries
+#### Collect proteins from InterPro API ####
 # resources_used.ncpus=1; resources_used.vmem=2572772kb; resources_used.walltime=00:44:49
 qsub -q SMALL -m abe -M $Email -l select=1:ncpus=1:mem=5gb -l walltime=12:00:00 -e qsub_out/PF01769_interpro_api_e -o qsub_out/PF01769_interpro_api_o scripts/qsub/PF01769_interpro_api.sh
 {
@@ -209,6 +210,25 @@ OUTPUT
 # Make fasta file from tsv
 zcat db/interpro_api/PF01769.tsv.gz | tail -n +2 | cut -f 1,10 | sed 's/^/>/g' | sed 's/\t/\n/g' | \
   gzip > db/interpro_api/PF01769.faa.gz
+
+#### Retrieve annotation from InterPro API ####
+# resources_used.vmem=2409488kb;resources_used.walltime=00:00:39
+# 
+qsub -q SMALL -m abe -M $Email -l select=1:ncpus=1:mem=5gb -l walltime=12:00:00 -e qsub_out/PF01769_interpro_api_annotation_e -o qsub_out/PF01769_interpro_api_annotation_o scripts/qsub/PF01769_interpro_api_annotation.sh
+{
+cd $PBS_O_WORKDIR
+mkdir -p db/interpro_api
+singularity exec --bind $(pwd):/temp bio_4.3.2_latest.sif bash -c "cd /temp && Rscript --vanilla --slave scripts/r/interpro_api_protein_annotation.R db/interpro_api/PF01769.tsv.gz db/interpro_api/PF01769_annotation.tsv"
+}
+# Compress PBS output
+gzip qsub_out/PF01769_interpro_api_annotation_{e,o}
+# Compress tsv
+cat db/interpro_api/PF01769_annotation.tsv | gzip > db/interpro_api/PF01769_annotation.tsv.gz
+# Number of entries
+zcat db/interpro_api/PF01769_annotation.tsv.gz | tail -n +2 | cut -f 1 | sort | uniq | wc -l
+<< OUTPUT
+
+OUTPUT
 ```
 
 # MISC: P2X acceptor (Omitted)
