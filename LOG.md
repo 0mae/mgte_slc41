@@ -40,13 +40,10 @@ User=XXX
 docker image build -t $User/bio_4.3.2 .
 ```
 
-- To pull the docker or singularity image via DockerHub
+- To pull the singularity image via DockerHub
 
 ``` {sh}
 #| label: pull_container
-# For local
-docker pull $User/bio_4.3.2
-# For fe1
 singularity pull docker://$User/bio_4.3.2
 ```
 
@@ -66,37 +63,16 @@ docker container run -p 8787:8787 -v ${PWD}:/home/rstudio -e PASSWORD=$Pass $Use
 library(tidyverse)
 ```
 
-## Supercomputer systems
+## Other software
+
+- Used softwares available in SuperComputer System (CB202), Institue for
+  Chemical Research, Kyoto University
+  - https://www.scl.kyoto-u.ac.jp/index_e.html
 
 ``` {sh}
 #| label: fe1
 bash
-module load quarto/1.2.335 hmmer/3.4 seqkit/2.8.2 mmseqs2/15-6f452 blast+/2.15.0 diamond/2.1.9 mafft/7.520 trimal/1.4.1 FastTree/2.1.11
-```
-
-``` {sh}
-#| label: HBW2
-project_acc=XXX
-```
-
-## Other software
-
-- [TaxonKit v0.18.0](https://bioinf.shenwei.me/taxonkit/)
-
-``` {sh}
-#| label: download_taxonkit
-wget -P $TAXONKIT https://github.com/shenwei356/taxonkit/releases/download/v0.18.0/taxonkit_linux_amd64.tar.gz
-tar -zxvf $TAXONKIT/taxonkit_linux_amd64.tar.gz -C $TAXONKIT
-# version
-$TAXONKIT/taxonkit --help | head -n3
-<< OUTPUT
-TaxonKit - A Practical and Efficient NCBI Taxonomy Toolkit
-
-Version: 0.18.0
-OUTPUT
-# Download and uncompress taxdump.tar.gz
-wget -P $TAXONKIT https://ftp.ncbi.nih.gov/pub/taxonomy/taxdump.tar.gz
-tar -zxvf $TAXONKIT/taxdump.tar.gz -C $TAXONKIT
+module load InterProScan/5.72-103.0
 ```
 
 ## Rendering
@@ -108,69 +84,6 @@ tar -zxvf $TAXONKIT/taxdump.tar.gz -C $TAXONKIT
 ``` {sh}
 #| label: quarto_render
 quarto render LOG.qmd
-```
-
-# Copy files
-
-## GTDB data set from anticonet_r220
-
-- Copy files from anticonet_r220 repository
-  (https://github.com/0mae/anticonet_r220/tree/main)
-- `proteins_raw_gtdbtax_cog.tsv.gz`
-  - Only proteins with COG IDs
-- `proteins_raw_gtdbtax_cog_synteny.tsv.gz`
-  - Proteins from GTDB representative genomes
-  - COG is assigned.
-- `seqs_split`
-  - 501 chunks of amino acid sequences from HQ GTDB representative
-    genomes
-
-``` {sh}
-#| label: copy_anticonet_r220_files
-mkdir -p data/tsv
-cp $anti220/data/tsv/proteins_raw_gtdbtax_cog.tsv.gz data/tsv/
-cp $anti220/data/tsv/proteins_raw_gtdbtax_cog_synteny.tsv.gz data/tsv/
-cp $anti220/data/tsv/lq_proteins_raw_gtdbtax_cog.tsv.gz data/tsv/
-cp $anti220/data/tsv/lq_proteins_raw_gtdbtax_cog_synteny.tsv.gz data/tsv/
-cp -r $anti220/data/seqs_split data/
-cp -r $anti220/data/seqs_split_lq data/
-cp $anti220/data/tsv/genomes_analyzed_ar.tsv.gz data/tsv/
-cp $anti220/data/tsv/genomes_analyzed_bac.tsv.gz data/tsv/
-cp $anti220/data/tsv/genomes_low_quality_ar.tsv.gz data/tsv/
-cp $anti220/data/tsv/genomes_low_quality_bac.tsv.gz data/tsv/
-```
-
-# Download databases
-
-## Pfam_A
-
-- RELEASE 37.0
-
-``` {sh}
-#| label: download_pfam_a_hmm
-mkdir -p db/pfam
-
-# resources_used.vmem=736392kb;resources_used.walltime=00:19:16
-qsub -q SMALL -m abe -M $Email -l select=1:ncpus=1:mem=48gb -l walltime=12:00:00 -e qsub_out/download_pfam_a_hmm_e -o qsub_out/download_pfam_a_hmm_o scripts/qsub/download_pfam_a_hmm.sh
-{
-source /etc/profile.d/modules.sh
-cd $PBS_O_WORKDIR
-cd db/pfam
-wget https://ftp.ebi.ac.uk/pub/databases/Pfam/current_release/userman.txt
-wget https://ftp.ebi.ac.uk/pub/databases/Pfam/current_release/relnotes.txt
-wget https://ftp.ebi.ac.uk/pub/databases/Pfam/current_release/Pfam-A.hmm.gz
-}
-
-# Compress PBS output
-gzip qsub_out/download_pfam_a_hmm_{e,o}
-
-# release note
-cat db/pfam/relnotes.txt | head -n3
-<< OUTPUT
-PFAM : Multiple alignments and profile HMMs of protein domains
-                        RELEASE 37.0
-            --------------------------------------
-OUTPUT
 ```
 
 # MgtE & SLC41
@@ -212,23 +125,94 @@ zcat db/interpro_api/PF01769.tsv.gz | tail -n +2 | cut -f 1,10 | sed 's/^/>/g' |
   gzip > db/interpro_api/PF01769.faa.gz
 
 #### Retrieve annotation from InterPro API ####
-# resources_used.vmem=2409488kb;resources_used.walltime=00:00:39
-# 
-qsub -q SMALL -m abe -M $Email -l select=1:ncpus=1:mem=5gb -l walltime=12:00:00 -e qsub_out/PF01769_interpro_api_annotation_e -o qsub_out/PF01769_interpro_api_annotation_o scripts/qsub/PF01769_interpro_api_annotation.sh
-{
-cd $PBS_O_WORKDIR
-mkdir -p db/interpro_api
-singularity exec --bind $(pwd):/temp bio_4.3.2_latest.sif bash -c "cd /temp && Rscript --vanilla --slave scripts/r/interpro_api_protein_annotation.R db/interpro_api/PF01769.tsv.gz db/interpro_api/PF01769_annotation.tsv"
-}
-# Compress PBS output
-gzip qsub_out/PF01769_interpro_api_annotation_{e,o}
-# Compress tsv
-cat db/interpro_api/PF01769_annotation.tsv | gzip > db/interpro_api/PF01769_annotation.tsv.gz
-# Number of entries
-zcat db/interpro_api/PF01769_annotation.tsv.gz | tail -n +2 | cut -f 1 | sort | uniq | wc -l
-<< OUTPUT
+## resources_used.vmem=2409488kb;resources_used.walltime=00:00:39
+## 
+#qsub -q SMALL -m abe -M $Email -l select=1:ncpus=1:mem=5gb -l walltime=12:00:00 -e qsub_out/PF01769_interpro_api_annotation_e -o qsub_out/PF01769_interpro_api_annotation_o scripts/qsub/PF01769_interpro_api_annotation.sh
+#{
+#cd $PBS_O_WORKDIR
+#mkdir -p db/interpro_api
+#singularity exec --bind $(pwd):/temp bio_4.3.2_latest.sif bash -c "cd /temp && Rscript --vanilla --slave scripts/r/interpro_api_protein_annotation.R db/interpro_api/PF01769.tsv.gz db/interpro_api/PF01769_annotation.tsv"
+#}
+## Compress PBS output
+#gzip qsub_out/PF01769_interpro_api_annotation_{e,o}
+## Compress tsv
+#cat db/interpro_api/PF01769_annotation.tsv | gzip > db/interpro_api/PF01769_annotation.tsv.gz
+## Number of entries
+#zcat db/interpro_api/PF01769_annotation.tsv.gz | tail -n +2 | cut -f 1 | sort | uniq | wc -l
+#<< OUTPUT
+#
+#OUTPUT
+```
 
-OUTPUT
+## Domain architecture
+
+- Find domains by InterProScan
+- Assign protein domains by using InterPro
+  - `e_val` sores were ignored and assigned domains based only on
+    overlapping ranges of each InterProID.
+  - Hits without InterProIDs were discarded.
+
+``` {sh}
+#| label: interproscan_PF01769
+# Run interproscan
+# 
+qsub -q APC -m abe -M $Email -l select=1:ncpus=12:mem=12gb -l walltime=12:00:00 -e qsub_out/interproscan_PF01769_e -o qsub_out/interproscan_PF01769_o scripts/qsub/interproscan_PF01769.sh
+{
+source /etc/profile.d/modules.sh
+module load InterProScan/5.72-103.0
+cd $PBS_O_WORKDIR
+mkdir -p data/tsv
+zcat db/interpro_api/PF01769.faa.gz | sed 's/\*$//' > db/interpro_api/PF01769.faa
+interproscan.sh -o data/tsv/interproscan_PF01769.tsv -cpu 12 -i db/interpro_api/PF01769.faa -f TSV --tempdir data/tsv/temp_interproscan_PF01769
+}
+
+# Left only Interpro information
+cat data/tsv/interproscan_PF01769.tsv | cut -f 1,3,7-9,12-15 | sed '1s/^/prot_acc\tseq_len\tstart\tend\te_val\tinterpro_acc\tinterpro_desc\n/' | gzip > data/tsv/interproscan_PF01769_interproID.tsv.gz
+
+# Number of hits
+cat data/tsv/interproscan_PF01769.tsv | wc -l
+# 381293
+<< EOF
+
+EOF
+
+# Number of hit seqs
+zcat data/tsv/interproscan_PF01769_interproID.tsv.gz | tail -n +2 | cut -f 1 | sort | uniq | wc -l
+# 28127
+<< EOF
+
+EOF
+
+
+
+
+
+
+
+
+
+# Assign domains (Considering hit ranges)
+# Performed with qsub (resources_used.vmem = 116872748kb;resources_used.walltime = 00:03:57)
+singularity exec --bind $(pwd):/temp bio_4.3.2_latest.sif bash -c "cd /temp && Rscript --vanilla --slave scripts/r/interproscan_assign_domains.R data/tsv/interproscan_PF01769_interproID.tsv.gz 40 data/tsv/interproscan_PF01769_interproID_range_num_tophits.tsv"
+
+gzip data/tsv/interproscan_PF01769_interproID_range_num_tophits.tsv
+zcat data/tsv/interproscan_PF01769_interproID_range_num_tophits.tsv.gz | wc -l
+# 165321
+<< EOF
+
+EOF
+
+# Join GTDB tax
+# Performed with qsub (resources_used.vmem = 38688kb;resources_used.walltime = 00:02:43)
+zcat data/tsv/interproscan_PF01769_interproID_range_num_tophits.tsv.gz | sed '1s/prot_acc/000_prodigal_acc/' | sort -k 1,1 | \
+  join -t "$(printf '\011')" -1 1 -2 2 -a 1 - <(zcat data/tsv/proteins_raw_gtdbtax_sorted_mini.tsv.gz | sort -k 2,2) | \
+  sed '1s/000_prodigal_acc/prodigal_acc/' | gzip > data/tsv/interproscan_PF01769_interproID_range_num_tophits_gtdbtax.tsv.gz
+
+zcat data/tsv/interproscan_PF01769_interproID_range_num_tophits_gtdbtax.tsv.gz | wc -l
+# 165321
+<< EOF
+
+EOF
 ```
 
 # MISC: P2X acceptor (Omitted)
