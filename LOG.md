@@ -156,7 +156,7 @@ zcat db/interpro_api/PF01769.tsv.gz | tail -n +2 | cut -f 1,10 | sed 's/^/>/g' |
 #| label: interproscan_PF01769
 # Run interproscan
 # 
-qsub -q APC -m abe -M $Email -l select=1:ncpus=12:mem=12gb -l walltime=12:00:00 -e qsub_out/interproscan_PF01769_e -o qsub_out/interproscan_PF01769_o scripts/qsub/interproscan_PF01769.sh
+qsub -q APC -m abe -M $Email -l select=1:ncpus=12:mem=30gb -l walltime=12:00:00 -e qsub_out/interproscan_PF01769_e -o qsub_out/interproscan_PF01769_o scripts/qsub/interproscan_PF01769.sh
 {
 source /etc/profile.d/modules.sh
 module load InterProScan/5.72-103.0
