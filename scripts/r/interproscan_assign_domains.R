@@ -15,8 +15,12 @@ out_file <- args[3]
 df_interproscan <- read.csv(
   in_file, colClasses = c("character", "character", "integer", "integer", "numeric", "character", "character"), 
   header = TRUE, sep = "\t", quote = "", na.strings=c("", "NULL", "-")) %>% as_tibble()
+# Read InterPro type list
+df_interpro_type <- read.csv("db/interpro/entry.list", header = TRUE, sep = "\t", quote = "", na.strings=c("", "NULL", "-")) %>% as_tibble()
+colnames(df_interpro_type) <- c("interpro_acc", "type", "entry_name")
 # Read InterPro short name list
-df_interpro_short <- read.csv("db/interpro/interpro_short_name_list.tsv.gz", header = TRUE, sep = "\t", quote = "", na.strings=c("", "NULL", "-")) %>% as_tibble()
+df_interpro_short <- read.csv("db/interpro/short_names.dat", header = FALSE, sep = "\t", quote = "", na.strings=c("", "NULL", "-")) %>% as_tibble()
+colnames(df_interpro_short) <- c("interpro_acc", "short_name")
 
 # Filter out interpro_acc == NA
 # e_val is no longer available because it also contains "scores" (https://interproscan-docs.readthedocs.io/en/latest/UserDocs.html#output-formats)
@@ -24,9 +28,8 @@ df_interpro_short <- read.csv("db/interpro/interpro_short_name_list.tsv.gz", hea
 df_interproscan_nest <- 
   df_interproscan %>% filter(!is.na(interpro_acc)) %>%
   group_by(prot_acc, seq_len, interpro_acc, interpro_desc) %>% nest() %>% 
-  left_join(
-    df_interpro_short %>% dplyr::rename(interpro_acc = "interpro_id", interpro_protein_n = "protein_count"), 
-    by = "interpro_acc") #%>% 
+  left_join(df_interpro_short, by = "interpro_acc") %>% 
+  left_join(df_interpro_type %>% select(-entry_name), by = "interpro_acc") #%>% 
   #select(prot_acc,seq_len,interpro_acc,data,protein_count,short_name,type,interpro_desc)
 
 # Assign range_num
@@ -41,7 +44,7 @@ df_interproscan_range_num <- do.call(
       bind_cols(
         df_interproscan_nest[i,c("prot_acc","seq_len","interpro_acc")],
         rng_reduced %>% as.data.frame() %>% as_tibble(),
-        df_interproscan_nest[i,c("short_name","type","interpro_desc","interpro_protein_n")],
+        df_interproscan_nest[i,c("short_name","type","interpro_desc")],
       ) %>% ungroup()
     }, mc.cores = n_cores
   )

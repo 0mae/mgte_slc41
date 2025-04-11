@@ -18,14 +18,6 @@ execute:
 Email=XXX
 # Project home directory
 Home=$PWD
-# GTDB rawdata directory
-GTDB_DIR="../db/gtdb_release220/data.gtdb.ecogenomic.org/releases/latest/"
-COG_DIR="../db/cog2020"
-KOFAM_DIR="../db/kofam_2024-05-01"
-# anticonet_r220 repository
-anti220="../anticonet_r220"
-# Software path
-TAXONKIT="../tools/taxonkit-0.18.0"
 # print columns
 function pri_col () {
 	head -n1 $1 | sed 's/\t/\n/g' | awk '{print NR,$1}'
@@ -89,6 +81,28 @@ module load InterProScan/5.72-103.0
 ```{sh}
 #| label: quarto_render
 quarto render LOG.qmd
+```
+
+# Database preparation
+
+## InterPro
+
+- Download lists from [InterPro](https://www.ebi.ac.uk/interpro/) ([FTP site](https://ftp.ebi.ac.uk/pub/databases/interpro/))
+  - type list
+  - short name list
+
+```{sh}
+#| label: interpro_short_name_list
+mkdir -p db/interpro
+wget -O db/interpro/entry.list https://ftp.ebi.ac.uk/pub/databases/interpro/current_release/entry.list
+wget -O db/interpro/short_names.dat https://ftp.ebi.ac.uk/pub/databases/interpro/current_release/short_names.dat
+# Check version
+wget -O db/interpro/release_notes.txt https://ftp.ebi.ac.uk/pub/databases/interpro/current_release/release_notes.txt
+cat db/interpro/release_notes.txt | grep "Release"
+<< EOF
+Release Notes
+Release 104.0, 6th February 2025
+EOF
 ```
 
 # MgtE & SLC41
@@ -187,7 +201,7 @@ EOF
 #### Assign domains (Considering hit ranges) ####
 # Performed with qsub (resources_used.vmem = 116872748kb;resources_used.walltime = 00:03:57)
 # 
-qsub -q APC -m abe -M $Email -l select=1:ncpus=12:mem=50gb -l walltime=12:00:00 -e qsub_out/interproscan_PF01769_domain_e -o qsub_out/interproscan_PF01769_domain_o scripts/qsub/interproscan_PF01769_domain.sh
+qsub -q SMALL -m abe -M $Email -l select=1:ncpus=12:mem=48gb -l walltime=12:00:00 -e qsub_out/interproscan_PF01769_domain_e -o qsub_out/interproscan_PF01769_domain_o scripts/qsub/interproscan_PF01769_domain.sh
 {
 cd $PBS_O_WORKDIR
 
