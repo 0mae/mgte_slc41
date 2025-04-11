@@ -18,6 +18,8 @@ execute:
 Email=XXX
 # Project home directory
 Home=$PWD
+# Software path
+TAXONKIT="../tools/taxonkit-0.19.0"
 # print columns
 function pri_col () {
 	head -n1 $1 | sed 's/\t/\n/g' | awk '{print NR,$1}'
@@ -72,6 +74,24 @@ bash
 module load InterProScan/5.72-103.0
 ```
 
+- [TaxonKit v0.19.0](https://bioinf.shenwei.me/taxonkit/)
+
+```{sh}
+#| label: download_taxonkit
+wget -P $TAXONKIT https://github.com/shenwei356/taxonkit/releases/download/v0.19.0/taxonkit_linux_amd64.tar.gz
+tar -zxvf $TAXONKIT/taxonkit_linux_amd64.tar.gz -C $TAXONKIT
+# version
+$TAXONKIT/taxonkit --help | head -n3
+<< OUTPUT
+TaxonKit - A Practical and Efficient NCBI Taxonomy Toolkit
+
+Version: 0.19.0
+OUTPUT
+# Download and uncompress taxdump.tar.gz
+wget -P $TAXONKIT https://ftp.ncbi.nih.gov/pub/taxonomy/taxdump.tar.gz
+tar -zxvf $TAXONKIT/taxdump.tar.gz -C $TAXONKIT
+```
+
 ## Rendering
 
 - `Ctrl + Shift + K` at VSCode
@@ -105,15 +125,12 @@ Release 104.0, 6th February 2025
 EOF
 ```
 
-# MgtE & SLC41
+# Collect proteins from InterPro API
 
 - Reference MgtE:
   - Thermus thermophilus TTHA1060 (UniProt: [Q5SMG8](https://www.uniprot.org/uniprotkb/Q5SMG8/entry))
 - MgtE Pfam domain:
   - [PF01769](https://www.ebi.ac.uk/interpro/entry/pfam/PF01769/) (Divalent cation transporter, MgtE)
-
-## Collect proteins from InterPro API
-
 - API manual: [Interpro 7 API](https://github.com/ProteinsWebTeam/interpro7-api/tree/master)
 - Make tsv and fasta files
 
@@ -139,28 +156,88 @@ OUTPUT
 # Make fasta file from tsv
 zcat db/interpro_api/PF01769.tsv.gz | tail -n +2 | cut -f 1,10 | sed 's/^/>/g' | sed 's/\t/\n/g' | \
   gzip > db/interpro_api/PF01769.faa.gz
-
-#### Retrieve annotation from InterPro API ####
-## resources_used.vmem=2409488kb;resources_used.walltime=00:00:39
-## 
-#qsub -q SMALL -m abe -M $Email -l select=1:ncpus=1:mem=5gb -l walltime=12:00:00 -e qsub_out/PF01769_interpro_api_annotation_e -o qsub_out/PF01769_interpro_api_annotation_o scripts/qsub/PF01769_interpro_api_annotation.sh
-#{
-#cd $PBS_O_WORKDIR
-#mkdir -p db/interpro_api
-#singularity exec --bind $(pwd):/temp bio_4.3.2_latest.sif bash -c "cd /temp && Rscript --vanilla --slave scripts/r/interpro_api_protein_annotation.R db/interpro_api/PF01769.tsv.gz db/interpro_api/PF01769_annotation.tsv"
-#}
-## Compress PBS output
-#gzip qsub_out/PF01769_interpro_api_annotation_{e,o}
-## Compress tsv
-#cat db/interpro_api/PF01769_annotation.tsv | gzip > db/interpro_api/PF01769_annotation.tsv.gz
-## Number of entries
-#zcat db/interpro_api/PF01769_annotation.tsv.gz | tail -n +2 | cut -f 1 | sort | uniq | wc -l
-#<< OUTPUT
-#
-#OUTPUT
 ```
 
-## Domain architecture
+## TaxonKit
+
+- https://bioinf.shenwei.me/taxonkit/
+- Format TaxID
+
+```{sh}
+#| label: PF01769_taxonkit
+time zcat db/interpro_api/PF01769.tsv.gz | tail -n +2 | \
+  $TAXONKIT/taxonkit reformat -I 7 -f "{K}\t{p}\t{c}\t{o}\t{f}\t{g}\t{s}" --data-dir $TAXONKIT --threads 12 | \
+  cat <(zcat db/interpro_api/PF01769.tsv.gz | head -n1 | \
+    perl -ne 's/\n/\tkingdom\tphylum\tclass\torder\tfamily\tgenus\tspecies\n/; print') - | \
+  gzip > db/interpro_api/PF01769_taxonkit.tsv.gz
+<< EOF
+14:34:19.389 [WARN] taxid 686832 was merged into 76867
+14:34:19.397 [WARN] taxid 436010 was merged into 1759441
+14:34:19.431 [WARN] taxid 1464123 was merged into 517425
+14:34:19.539 [WARN] taxid 1974487 was merged into 1805029
+14:34:19.539 [WARN] taxid 1974486 was merged into 1805029
+14:34:19.539 [WARN] taxid 1974488 was merged into 1805029
+14:34:19.563 [WARN] taxid 2137877 was merged into 3107375
+14:34:19.599 [WARN] taxid 139420 was merged into 2498619
+14:34:19.748 [WARN] taxid 267368 was merged into 29283
+14:34:19.748 [WARN] taxid 267368 was merged into 29283
+14:34:19.820 [WARN] taxid 35687 was merged into 3111310
+14:34:19.820 [WARN] taxid 35687 was merged into 3111310
+14:34:19.820 [WARN] taxid 35687 was merged into 3111310
+14:34:19.874 [WARN] taxid 237656 was merged into 33907
+14:34:19.902 [WARN] taxid 1914757 was merged into 1768011
+14:34:19.917 [WARN] taxid 2762239 was merged into 2760084
+14:34:19.917 [WARN] taxid 2762239 was merged into 2760084
+14:34:19.917 [WARN] taxid 2762239 was merged into 2760084
+14:34:19.967 [WARN] taxid 2137877 was merged into 3107375
+14:34:19.988 [WARN] taxid 2780116 was merged into 2024849
+14:34:20.001 [WARN] taxid 2598218 was merged into 3402493
+14:34:20.001 [WARN] taxid 2598218 was merged into 3402493
+14:34:20.001 [WARN] taxid 2598218 was merged into 3402493
+14:34:20.001 [WARN] taxid 2598218 was merged into 3402493
+14:34:20.017 [WARN] taxid 59451 was merged into 3371016
+14:34:20.017 [WARN] taxid 59451 was merged into 3371016
+14:34:20.017 [WARN] taxid 59451 was merged into 3371016
+14:34:20.029 [WARN] taxid 621376 was merged into 570156
+14:34:20.029 [WARN] taxid 621376 was merged into 570156
+14:34:20.055 [WARN] taxid 2860396 was merged into 3039389
+14:34:20.055 [WARN] taxid 3039391 was merged into 3039389
+14:34:20.055 [WARN] taxid 3039390 was merged into 3039389
+14:34:20.066 [WARN] taxid 2771548 was merged into 290112
+
+real    0m2.540s
+user    0m5.300s
+sys     0m0.826s
+EOF
+
+# Number of entries
+zcat db/interpro_api/PF01769_taxonkit.tsv.gz | tail -n +2 | wc -l
+<< OUTPUT
+42801
+OUTPUT
+
+# Number of Kingdoms
+zcat db/interpro_api/PF01769_taxonkit.tsv.gz | tail -n +2 | cut -f 12 | sort | uniq -c
+<< EOF
+   1822 
+   8531 Bacillati
+    594 Fungi
+    151 Fusobacteriati
+      2 Heunggongvirae
+   6149 Metazoa
+   1818 Methanobacteriati
+    196 Nanobdellati
+    105 Promethearchaeati
+  22719 Pseudomonadati
+    409 Thermoproteati
+    191 Thermotogati
+    114 Viridiplantae
+EOF
+```
+
+# Domain architecture
+
+## Find domains by InterProScan
 
 - Find domains by InterProScan
 - Assign protein domains by using InterPro
@@ -199,8 +276,7 @@ zcat data/tsv/interproscan_PF01769_interproID.tsv.gz | tail -n +2 | cut -f 1 | s
 EOF
 
 #### Assign domains (Considering hit ranges) ####
-# Performed with qsub (resources_used.vmem = 116872748kb;resources_used.walltime = 00:03:57)
-# 
+# resources_used.vmem=43119012kb;resources_used.walltime=00:19:42
 qsub -q SMALL -m abe -M $Email -l select=1:ncpus=12:mem=48gb -l walltime=12:00:00 -e qsub_out/interproscan_PF01769_domain_e -o qsub_out/interproscan_PF01769_domain_o scripts/qsub/interproscan_PF01769_domain.sh
 {
 cd $PBS_O_WORKDIR
@@ -219,25 +295,12 @@ gzip qsub_out/interproscan_PF01769_domain_{e,o}
 
 # Number of hits
 zcat data/tsv/interproscan_PF01769_interproID_range_num_tophits.tsv.gz | wc -l
-# 165321
 << EOF
-
-EOF
-
-# Join GTDB tax
-# Performed with qsub (resources_used.vmem = 38688kb;resources_used.walltime = 00:02:43)
-zcat data/tsv/interproscan_PF01769_interproID_range_num_tophits.tsv.gz | \
-  sed '1s/prot_acc/000_prodigal_acc/' | sort -k 1,1 | \
-  join -t "$(printf '\011')" -1 1 -2 2 -a 1 - <(zcat data/tsv/proteins_raw_gtdbtax_sorted_mini.tsv.gz | sort -k 2,2) | \
-  sed '1s/000_prodigal_acc/prodigal_acc/' | \
-  gzip > data/tsv/interproscan_PF01769_interproID_range_num_tophits_gtdbtax.tsv.gz
-
-zcat data/tsv/interproscan_PF01769_interproID_range_num_tophits_gtdbtax.tsv.gz | wc -l
-# 165321
-<< EOF
-
+266742
 EOF
 ```
+
+## Analyze domain architecture
 
 
 
