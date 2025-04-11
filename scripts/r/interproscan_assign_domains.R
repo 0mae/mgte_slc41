@@ -13,7 +13,7 @@ out_file <- args[3]
 
 # Read tsv
 df_interproscan <- read.csv(
-  in_file, colClasses = c("character", "character", "integer", "integer", "numeric", "character", "character"), 
+  in_file, colClasses = c("character", "integer", "integer", "integer", "numeric", "character", "character"), 
   header = TRUE, sep = "\t", quote = "", na.strings=c("", "NULL", "-")) %>% as_tibble()
 # Read InterPro type list
 df_interpro_type <- read.csv("db/interpro/entry.list", header = TRUE, sep = "\t", quote = "", na.strings=c("", "NULL", "-")) %>% as_tibble()

@@ -184,7 +184,7 @@ interproscan.sh -o data/tsv/interproscan_PF01769.tsv -cpu 12 -i db/interpro_api/
 gzip qsub_out/interproscan_PF01769_{e,o}
 
 # Left only Interpro information
-cat data/tsv/interproscan_PF01769.tsv | cut -f 1,3,7-9,12-15 | sed '1s/^/prot_acc\tseq_len\tstart\tend\te_val\tinterpro_acc\tinterpro_desc\n/' | gzip > data/tsv/interproscan_PF01769_interproID.tsv.gz
+cat data/tsv/interproscan_PF01769.tsv | cut -f 1,3,7-9,12,13 | sed '1s/^/prot_acc\tseq_len\tstart\tend\te_val\tinterpro_acc\tinterpro_desc\n/' | gzip > data/tsv/interproscan_PF01769_interproID.tsv.gz
 
 # Number of hits
 cat data/tsv/interproscan_PF01769.tsv | wc -l
