@@ -154,8 +154,8 @@ zcat db/interpro_api/PF01769.tsv.gz | tail -n +2 | cut -f 1,10 | sed 's/^/>/g' |
 
 ``` {sh}
 #| label: interproscan_PF01769
-# Run interproscan
-# 
+#### Run interproscan ####
+# resources_used.vmem=25355312kb;resources_used.walltime=04:44:15
 qsub -q APC -m abe -M $Email -l select=1:ncpus=12:mem=30gb -l walltime=12:00:00 -e qsub_out/interproscan_PF01769_e -o qsub_out/interproscan_PF01769_o scripts/qsub/interproscan_PF01769.sh
 {
 source /etc/profile.d/modules.sh
@@ -165,37 +165,44 @@ mkdir -p data/tsv
 zcat db/interpro_api/PF01769.faa.gz | sed 's/\*$//' > db/interpro_api/PF01769.faa
 interproscan.sh -o data/tsv/interproscan_PF01769.tsv -cpu 12 -i db/interpro_api/PF01769.faa -f TSV --tempdir data/tsv/temp_interproscan_PF01769
 }
+# Compress PBS output
+gzip qsub_out/interproscan_PF01769_{e,o}
 
 # Left only Interpro information
 cat data/tsv/interproscan_PF01769.tsv | cut -f 1,3,7-9,12-15 | sed '1s/^/prot_acc\tseq_len\tstart\tend\te_val\tinterpro_acc\tinterpro_desc\n/' | gzip > data/tsv/interproscan_PF01769_interproID.tsv.gz
 
 # Number of hits
 cat data/tsv/interproscan_PF01769.tsv | wc -l
-# 381293
 << EOF
-
+606598
 EOF
 
 # Number of hit seqs
 zcat data/tsv/interproscan_PF01769_interproID.tsv.gz | tail -n +2 | cut -f 1 | sort | uniq | wc -l
-# 28127
 << EOF
-
+42801
 EOF
 
-
-
-
-
-
-
-
-
-# Assign domains (Considering hit ranges)
+#### Assign domains (Considering hit ranges) ####
 # Performed with qsub (resources_used.vmem = 116872748kb;resources_used.walltime = 00:03:57)
-singularity exec --bind $(pwd):/temp bio_4.3.2_latest.sif bash -c "cd /temp && Rscript --vanilla --slave scripts/r/interproscan_assign_domains.R data/tsv/interproscan_PF01769_interproID.tsv.gz 40 data/tsv/interproscan_PF01769_interproID_range_num_tophits.tsv"
+# 
+qsub -q APC -m abe -M $Email -l select=1:ncpus=12:mem=50gb -l walltime=12:00:00 -e qsub_out/interproscan_PF01769_domain_e -o qsub_out/interproscan_PF01769_domain_o scripts/qsub/interproscan_PF01769_domain.sh
+{
+cd $PBS_O_WORKDIR
 
-gzip data/tsv/interproscan_PF01769_interproID_range_num_tophits.tsv
+singularity exec --bind $(pwd):/temp bio_4.3.2_latest.sif bash -c "cd /temp && \
+  Rscript --vanilla --slave scripts/r/interproscan_assign_domains.R \
+    data/tsv/interproscan_PF01769_interproID.tsv.gz \
+    12 \
+    data/tsv/interproscan_PF01769_interproID_range_num_tophits.tsv"
+
+cat data/tsv/interproscan_PF01769_interproID_range_num_tophits.tsv | \
+  gzip > data/tsv/interproscan_PF01769_interproID_range_num_tophits.tsv.gz
+}
+# Compress PBS output
+gzip qsub_out/interproscan_PF01769_domain_{e,o}
+
+# Number of hits
 zcat data/tsv/interproscan_PF01769_interproID_range_num_tophits.tsv.gz | wc -l
 # 165321
 << EOF
@@ -204,9 +211,11 @@ EOF
 
 # Join GTDB tax
 # Performed with qsub (resources_used.vmem = 38688kb;resources_used.walltime = 00:02:43)
-zcat data/tsv/interproscan_PF01769_interproID_range_num_tophits.tsv.gz | sed '1s/prot_acc/000_prodigal_acc/' | sort -k 1,1 | \
+zcat data/tsv/interproscan_PF01769_interproID_range_num_tophits.tsv.gz | \
+  sed '1s/prot_acc/000_prodigal_acc/' | sort -k 1,1 | \
   join -t "$(printf '\011')" -1 1 -2 2 -a 1 - <(zcat data/tsv/proteins_raw_gtdbtax_sorted_mini.tsv.gz | sort -k 2,2) | \
-  sed '1s/000_prodigal_acc/prodigal_acc/' | gzip > data/tsv/interproscan_PF01769_interproID_range_num_tophits_gtdbtax.tsv.gz
+  sed '1s/000_prodigal_acc/prodigal_acc/' | \
+  gzip > data/tsv/interproscan_PF01769_interproID_range_num_tophits_gtdbtax.tsv.gz
 
 zcat data/tsv/interproscan_PF01769_interproID_range_num_tophits_gtdbtax.tsv.gz | wc -l
 # 165321
